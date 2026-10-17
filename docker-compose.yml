@@ -9,3 +9,24 @@ services:
       - ./mosquitto/data:/mosquitto/data
       - ./mosquitto/log:/mosquitto/log
     restart: unless-stopped
+
+  # Simulated sensor: publishes a temperature reading every second.
+  sensor:
+    image: eclipse-mosquitto:2
+    depends_on: [mosquitto]
+    env_file: .env
+    environment:
+      BROKER: mosquitto
+      SENSOR_USER: sensor
+    entrypoint: ["sh", "/sim/sensor-sim.sh"]
+    volumes:
+      - ./scripts:/sim:ro
+    restart: unless-stopped
+
+  # Receives the sensor's messages. Output appears in `docker compose logs monitor`.
+  monitor:
+    image: eclipse-mosquitto:2
+    depends_on: [mosquitto]
+    env_file: .env
+    entrypoint: ["sh", "-c", "mosquitto_sub -h mosquitto -u monitor -P \"$$MONITOR_PW\" -t factory/machine1/temperature -v"]
+    restart: unless-stopped

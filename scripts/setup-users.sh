@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# Creates mosquitto/config/passwd with a random password per user.
-# The password file is git-ignored. Share credentials through a private channel only.
+# Creates mosquitto/config/passwd and .env with a random password per user.
+# Both files are git-ignored. Share credentials through a private channel only.
 # Needs only bash and Docker (Git Bash or WSL on Windows).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PASSWD_FILE="$ROOT/mosquitto/config/passwd"
+ENV_FILE="$ROOT/.env"
 USERS=(sensor monitor controller device)
 IMAGE=eclipse-mosquitto:2
 
-if [[ -e "$PASSWD_FILE" ]]; then
-  echo "passwd already exists: $PASSWD_FILE"
-  echo "Delete it first if you want to regenerate passwords."
+if [[ -e "$PASSWD_FILE" || -e "$ENV_FILE" ]]; then
+  echo "passwd or .env already exists under $ROOT"
+  echo "Delete both first if you want to regenerate passwords."
   exit 1
 fi
 
@@ -22,12 +23,16 @@ random_pw() {
 }
 
 : > "$PASSWD_FILE"
+: > "$ENV_FILE"
 for user in "${USERS[@]}"; do
   pw="$(random_pw)"
   docker run --rm -v "$ROOT/mosquitto/config:/mosquitto/config" "$IMAGE" \
     mosquitto_passwd -b /mosquitto/config/passwd "$user" "$pw" >/dev/null
+  echo "$(echo "$user" | tr '[:lower:]' '[:upper:]')_PW=$pw" >> "$ENV_FILE"
   echo "$user : $pw"
 done
 
+chmod 600 "$PASSWD_FILE" "$ENV_FILE" 2>/dev/null || true
 echo
-echo "Written to $PASSWD_FILE. Restart the broker to apply: docker compose restart"
+echo "Written: $PASSWD_FILE and $ENV_FILE"
+echo "Start or restart the stack: docker compose up -d"

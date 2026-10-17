@@ -1,7 +1,7 @@
 # MQTT Security in OT/IIoT — Baseline Environment
 
-Eclipse Mosquitto broker in Docker with authentication and per-user ACL enabled.
-No TLS yet (planned as a later step).
+Eclipse Mosquitto broker in Docker with authentication and per-user ACL enabled,
+plus a simulated sensor and a monitor. No TLS yet (planned as a later step).
 
 ## Requirements
 
@@ -15,17 +15,30 @@ before that file existed, re-clone rather than editing the scripts in place.
 ## Setup
 
 ```bash
-./scripts/setup-users.sh          # creates mosquitto/config/passwd (git-ignored)
-docker compose up -d              # start the broker on port 1883
+./scripts/setup-users.sh          # creates mosquitto/config/passwd and .env (both git-ignored)
+docker compose up -d              # starts broker, sensor, monitor
+docker compose logs -f monitor    # watch sensor readings arrive
 ```
 
 Share the printed credentials through a private channel. Do not commit them.
-To regenerate passwords: delete `mosquitto/config/passwd`, run setup again, then `docker compose restart`.
+To regenerate passwords: `docker compose down`, delete `mosquitto/config/passwd` and `.env`,
+run setup again, then `docker compose up -d`.
+
+## Services
+
+| Service | Role |
+|---|---|
+| mosquitto | Broker on port 1883 (auth + ACL) |
+| sensor | Publishes `{"value","seq","ts"}` to `factory/machine1/temperature` every second (`scripts/sensor-sim.sh`) |
+| monitor | Subscribes to the temperature topic and prints what it receives |
+
+Controller and device are not in compose yet.
 
 ## Smoke test
 
 ```bash
-./scripts/smoke-test.sh <sensor-pw> <monitor-pw> <device-pw>
+set -a && . ./.env && set +a
+./scripts/smoke-test.sh "$SENSOR_PW" "$MONITOR_PW" "$DEVICE_PW"
 ```
 
 Checks:
@@ -48,8 +61,8 @@ subscriber receives the message, not at the publisher's exit code.
 
 ## Layout
 
-- `docker-compose.yml` — broker service
+- `docker-compose.yml` — broker, sensor, monitor services
 - `mosquitto/config/mosquitto.conf` — broker settings
 - `mosquitto/config/acl` — per-user topic rules
-- `scripts/` — setup and smoke test
+- `scripts/` — setup, smoke test, sensor simulator
 - `.gitattributes` — forces LF on `.sh` files
