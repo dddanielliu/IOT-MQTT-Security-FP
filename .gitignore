@@ -1,0 +1,5 @@
+# Credentials and runtime state, never commit
+mosquitto/config/passwd
+mosquitto/data/
+mosquitto/log/
+.env

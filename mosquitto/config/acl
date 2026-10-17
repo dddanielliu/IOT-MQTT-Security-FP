@@ -1,0 +1,17 @@
+# Least-privilege ACL, matching the topics in the proposal.
+# Topics:
+#   factory/machine1/temperature  (sensor -> monitor/controller)
+#   factory/machine1/control      (controller -> simulated device)
+
+user sensor
+topic write factory/machine1/temperature
+
+user monitor
+topic read factory/machine1/temperature
+
+user controller
+topic read factory/machine1/temperature
+topic write factory/machine1/control
+
+user device
+topic read factory/machine1/control
