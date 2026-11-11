@@ -13,6 +13,7 @@ IMAGE=eclipse-mosquitto:2
 HOST=host.docker.internal
 TOPIC=factory/machine1/temperature
 CONTROL=factory/machine1/control
+TEST_ID="smoke-$(date +%s)-$$"
 pass=0; fail=0
 
 report() {  # report <ok|fail> <description>
@@ -23,13 +24,13 @@ report() {  # report <ok|fail> <description>
 # 1. Normal flow: monitor receives the sensor's message.
 RECV="$(mktemp)"
 docker run --rm "$IMAGE" mosquitto_sub -h "$HOST" -u monitor -P "$MONITOR_PW" \
-  -t "$TOPIC" -C 1 -W 8 > "$RECV" 2>/dev/null &
+  -t "$TOPIC" -W 8 > "$RECV" 2>/dev/null &
 SUB_PID=$!
 sleep 2
 docker run --rm "$IMAGE" mosquitto_pub -h "$HOST" -u sensor -P "$SENSOR_PW" \
-  -t "$TOPIC" -m '{"value":25.0}' >/dev/null 2>&1
-wait "$SUB_PID"
-if grep -q '"value":25.0' "$RECV"; then report ok "monitor receives sensor message"
+  -t "$TOPIC" -m "{\"value\":25.0,\"test_id\":\"$TEST_ID\"}" >/dev/null 2>&1
+wait "$SUB_PID" || true
+if grep -Fq "\"test_id\":\"$TEST_ID\""  "$RECV"; then report ok "monitor receives sensor message"
 else report fail "monitor receives sensor message"; fi
 rm -f "$RECV"
 
