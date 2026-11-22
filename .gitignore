@@ -3,3 +3,5 @@ mosquitto/config/passwd
 mosquitto/data/
 mosquitto/log/
 .env
+
+/.vscode/
