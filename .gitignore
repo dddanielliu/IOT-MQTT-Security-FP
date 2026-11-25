@@ -3,3 +3,4 @@ mosquitto/config/passwd
 mosquitto/data/
 mosquitto/log/
 .env
+mosquitto/config/certs/

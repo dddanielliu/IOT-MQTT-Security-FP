@@ -4,6 +4,7 @@ services:
     container_name: mqtt-broker
     ports:
       - "1883:1883"
+      - "8883:8883"
     volumes:
       - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data
@@ -21,6 +22,7 @@ services:
     entrypoint: ["sh", "/sim/sensor-sim.sh"]
     volumes:
       - ./scripts:/sim:ro
+      - ./mosquitto/config/certs/ca.crt:/certs/ca.crt:ro
     restart: unless-stopped
 
   # Receives the sensor's messages. Output appears in `docker compose logs monitor`.
@@ -28,5 +30,7 @@ services:
     image: eclipse-mosquitto:2
     depends_on: [mosquitto]
     env_file: .env
-    entrypoint: ["sh", "-c", "mosquitto_sub -h mosquitto -u monitor -P \"$$MONITOR_PW\" -t factory/machine1/temperature -v"]
+    volumes:
+      - ./mosquitto/config/certs/ca.crt:/certs/ca.crt:ro
+    entrypoint: ["sh", "-c", "mosquitto_sub -h mosquitto -p 8883 --cafile /certs/ca.crt -u monitor -P \"$$MONITOR_PW\" -t factory/machine1/temperature -v"]
     restart: unless-stopped

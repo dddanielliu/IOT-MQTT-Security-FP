@@ -19,7 +19,8 @@ while true; do
     printf "%.2f", n
   }')
   ts=$(date +%s)
-  mosquitto_pub -h "$BROKER" -u "$SENSOR_USER" -P "$SENSOR_PW" \
+  mosquitto_pub -h "$BROKER" -p 8883 --cafile /certs/ca.crt \
+    -u "$SENSOR_USER" -P "$SENSOR_PW" \
     -t "$TOPIC" -m "{\"value\":$value,\"seq\":$seq,\"ts\":$ts}" \
     || echo "publish failed (seq=$seq)" >&2
   sleep 1
