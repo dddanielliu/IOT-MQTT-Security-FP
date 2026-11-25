@@ -9,6 +9,7 @@ if [[ $# -ne 3 ]]; then
   exit 2
 fi
 SENSOR_PW="$1"; MONITOR_PW="$2"; DEVICE_PW="$3"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE=eclipse-mosquitto:2
 HOST=host.docker.internal
 TOPIC=factory/machine1/temperature
@@ -54,6 +55,33 @@ wait "$SUB_PID"
 if [[ -s "$RECV" ]]; then report fail "sensor's forged publish to control topic is blocked"
 else report ok "sensor's forged publish to control topic is blocked"; fi
 rm -f "$RECV"
+
+# 4. TLS (8883): a client that trusts the lab CA can publish and the monitor receives it.
+CA="$ROOT/mosquitto/config/certs/ca.crt"
+if [[ ! -f "$CA" ]]; then
+  report fail "TLS checks need certs (run scripts/gen-certs.sh first)"
+else
+  RECV="$(mktemp)"
+  docker run --rm -v "$CA:/certs/ca.crt:ro" "$IMAGE" mosquitto_sub -h "$HOST" -p 8883 \
+    --cafile /certs/ca.crt -u monitor -P "$MONITOR_PW" -t "$TOPIC" -W 8 > "$RECV" 2>/dev/null &
+  SUB_PID=$!
+  sleep 2
+  docker run --rm -v "$CA:/certs/ca.crt:ro" "$IMAGE" mosquitto_pub -h "$HOST" -p 8883 \
+    --cafile /certs/ca.crt -u sensor -P "$SENSOR_PW" -t "$TOPIC" \
+    -m "{\"value\":25.0,\"test_id\":\"${TEST_ID}-tls\"}" >/dev/null 2>&1
+  wait "$SUB_PID" || true
+  if grep -Fq "\"test_id\":\"${TEST_ID}-tls\"" "$RECV"; then report ok "TLS: sensor message reaches monitor over 8883"
+  else report fail "TLS: sensor message reaches monitor over 8883"; fi
+  rm -f "$RECV"
+
+  # 5. TLS: a client that does not trust the lab CA must fail the handshake.
+  if docker run --rm "$IMAGE" mosquitto_pub -h "$HOST" -p 8883 -u sensor -P "$SENSOR_PW" \
+       -t "$TOPIC" -m 'x' >/dev/null 2>&1; then
+    report fail "TLS: client without the lab CA is rejected"
+  else
+    report ok "TLS: client without the lab CA is rejected"
+  fi
+fi
 
 echo
 echo "passed=$pass failed=$fail"
