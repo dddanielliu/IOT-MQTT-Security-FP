@@ -45,8 +45,9 @@ To regenerate everything: `docker compose down`, delete `mosquitto/config/passwd
 | mosquitto | Broker: 1883 plaintext and 8883 TLS, both with auth + ACL |
 | sensor | Publishes `{"value","seq","ts"}` to `factory/machine1/temperature` every second over 8883 (`scripts/sensor-sim.sh`) |
 | monitor | Subscribes to the temperature topic over 8883 and prints what it receives |
-
-Controller and device are not in compose yet.
+| controller | Benign controller: publishes control commands over TLS (`services/controller.py`) |
+| device | Simulated actuator: checks commands with `GUARD` on or off, then executes (`services/device.py`) |
+| attacker | Only with `--profile attack`: sends malicious commands with the controller's credentials (`services/attacker.py`) |
 
 ## TLS
 
@@ -76,6 +77,36 @@ use a unique `test_id` in the payload, so they cannot match a regular sensor rea
 
 Checks 4 and 5 need `mosquitto/config/certs/ca.crt`. Without it the script reports a failure.
 
+## Direction B: application-layer checks over TLS
+
+Question: when a legitimate, TLS-authenticated client sends bad control messages, does
+the device still execute them? TLS protects the channel, not the content.
+
+Components (all in `services/`, one Python image):
+- `controller` — benign controller. Publishes setpoint and fan commands every 5 s over TLS.
+- `device` — simulated actuator. `GUARD=on` runs `guard.py` before executing; `GUARD=off` is the baseline.
+- `attacker` — uses the controller's stolen credentials over TLS (valid cert, valid password,
+  allowed topic). Only starts with `--profile attack`.
+- `guard.py` — allowed commands, value ranges, type checks, and a per-command rate limit.
+
+Run the experiment (about 1 minute, runs guard off then guard on):
+
+```bash
+./scripts/run-direction-b.sh
+```
+
+Results are written to `experiments/summary-guard-off.txt` and `experiments/summary-guard-on.txt`
+(git-ignored). Ground truth stays in the attacker and controller output, and the device never reads it.
+
+Metrics:
+- **ASR** = malicious messages executed ÷ malicious messages sent
+- **FPR** = benign messages rejected ÷ benign messages sent
+
+Scenarios: out-of-range values, unknown commands, malformed content, a rate flood, and an
+in-range residual case that should pass (it documents what range checks cannot catch).
+
+Re-run the evaluator by itself: `docker compose --profile attack run --rm --no-deps --entrypoint python attacker evaluate.py`
+
 ## Users and topics
 
 | User | Topic | Permission |
@@ -92,5 +123,6 @@ Checks 4 and 5 need `mosquitto/config/certs/ca.crt`. Without it the script repor
 - `mosquitto/config/mosquitto.conf` — broker settings (1883 plaintext, 8883 TLS)
 - `mosquitto/config/acl` — per-user topic rules
 - `mosquitto/config/certs/` — generated CA and broker certificate (git-ignored)
-- `scripts/` — setup, certificate generation, smoke test, sensor simulator
+- `services/` — controller, device (with guard), attacker, evaluator; one Python image
+- `scripts/` — setup, certificate generation, smoke test, sensor simulator, direction B experiment
 - `.gitattributes` — forces LF on `.sh` files

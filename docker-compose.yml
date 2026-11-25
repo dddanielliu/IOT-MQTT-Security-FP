@@ -34,3 +34,41 @@ services:
       - ./mosquitto/config/certs/ca.crt:/certs/ca.crt:ro
     entrypoint: ["sh", "-c", "mosquitto_sub -h mosquitto -p 8883 --cafile /certs/ca.crt -u monitor -P \"$$MONITOR_PW\" -t factory/machine1/temperature -v"]
     restart: unless-stopped
+
+  # Simulated actuator (direction B). GUARD=on runs the app-layer checks, GUARD=off is the baseline.
+  device:
+    build: ./services
+    image: iot-mqtt-app:local
+    depends_on: [mosquitto]
+    env_file: .env
+    environment:
+      GUARD: ${GUARD:-on}
+    volumes:
+      - ./mosquitto/config/certs/ca.crt:/certs/ca.crt:ro
+      - ./experiments:/out
+    command: ["python", "-u", "device.py"]
+    restart: unless-stopped
+
+  # Benign controller: reads temperature, publishes setpoint and fan commands over TLS.
+  controller:
+    build: ./services
+    image: iot-mqtt-app:local
+    depends_on: [mosquitto]
+    env_file: .env
+    volumes:
+      - ./mosquitto/config/certs/ca.crt:/certs/ca.crt:ro
+      - ./experiments:/out
+    command: ["python", "-u", "controller.py"]
+    restart: unless-stopped
+
+  # Attacker (direction B). Uses the controller's stolen credentials. Only starts with --profile attack.
+  attacker:
+    build: ./services
+    image: iot-mqtt-app:local
+    profiles: [attack]
+    depends_on: [mosquitto]
+    env_file: .env
+    volumes:
+      - ./mosquitto/config/certs/ca.crt:/certs/ca.crt:ro
+      - ./experiments:/out
+    command: ["python", "-u", "attacker.py"]
